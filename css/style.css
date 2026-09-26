@@ -348,16 +348,6 @@ select {
   margin-bottom: 8px;
 }
 
-.promo-badge {
-  background: var(--accent);
-  color: white;
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  box-shadow: var(--shadow);
-}
-
 .site-settings-modal {
   position: fixed;
   inset: 0;
