@@ -697,6 +697,25 @@ function readFileAsDataUrl(file) {
   });
 }
 
+async function readProductImageAsDataUrl(file) {
+  const source = await readFileAsDataUrl(file);
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = reject;
+    image.src = source;
+  });
+
+  const scale = Math.min(1, 1400 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Не вдалося обробити зображення.');
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.78);
+}
+
 async function readBrandImageAsDataUrl(file) {
   const source = await readFileAsDataUrl(file);
   const image = new Image();
@@ -729,7 +748,7 @@ async function handleAddProduct(event) {
   }
 
   try {
-    const gallery = await Promise.all(uploadedFiles.map(readFileAsDataUrl));
+    const gallery = await Promise.all(uploadedFiles.map(readProductImageAsDataUrl));
     const newProduct = {
       id: Date.now(),
       category: formData.get('category') || 'Winter Sale',
@@ -743,7 +762,12 @@ async function handleAddProduct(event) {
     };
 
     products.unshift(newProduct);
-    saveProductsToStorage();
+    try {
+      saveProductsToStorage();
+    } catch (error) {
+      products.shift();
+      throw error;
+    }
     catalogState.page = 1;
     renderCatalog();
     form.reset();
