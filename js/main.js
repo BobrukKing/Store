@@ -413,6 +413,10 @@ function initSiteSettings() {
         siteSettings.brandImage = await readBrandImageAsDataUrl(uploadedImage);
       } catch (error) {
         siteSettings = previousSettings;
+        if (error && error.message === 'heic-conversion-unavailable') {
+          alert('Для обробки HEIC/HEIF потрібне підключення до інтернету. Перевірте з’єднання та спробуйте ще раз.');
+          return;
+        }
         alert('Не вдалося обробити зображення аватарки. Спробуйте інше фото.');
         return;
       }
@@ -697,14 +701,55 @@ function readFileAsDataUrl(file) {
   });
 }
 
-async function readProductImageAsDataUrl(file) {
-  const source = await readFileAsDataUrl(file);
-  const image = new Image();
-  await new Promise((resolve, reject) => {
-    image.onload = resolve;
-    image.onerror = reject;
+function createImageFromDataUrl(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Не вдалося відкрити зображення.'));
     image.src = source;
   });
+}
+
+let heicConverterPromise;
+
+function loadHeicConverter() {
+  if (typeof window.heic2any === 'function') return Promise.resolve(window.heic2any);
+  if (!heicConverterPromise) {
+    heicConverterPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      script.onload = () => {
+        if (typeof window.heic2any === 'function') resolve(window.heic2any);
+        else reject(new Error('heic-conversion-unavailable'));
+      };
+      script.onerror = () => reject(new Error('heic-conversion-unavailable'));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      heicConverterPromise = null;
+      throw error;
+    });
+  }
+  return heicConverterPromise;
+}
+
+async function loadImageFromFile(file) {
+  const source = await readFileAsDataUrl(file);
+  try {
+    return await createImageFromDataUrl(source);
+  } catch (error) {
+    const isHeic = /image\/hei[cf]/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+    if (!isHeic) throw error;
+
+    const convertHeic = await loadHeicConverter();
+    const converted = await convertHeic({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    const jpegBlob = Array.isArray(converted) ? converted[0] : converted;
+    if (!jpegBlob) throw error;
+    return createImageFromDataUrl(await readFileAsDataUrl(jpegBlob));
+  }
+}
+
+async function readProductImageAsDataUrl(file) {
+  const image = await loadImageFromFile(file);
 
   const scale = Math.min(1, 1400 / Math.max(image.naturalWidth, image.naturalHeight));
   const canvas = document.createElement('canvas');
@@ -717,13 +762,7 @@ async function readProductImageAsDataUrl(file) {
 }
 
 async function readBrandImageAsDataUrl(file) {
-  const source = await readFileAsDataUrl(file);
-  const image = new Image();
-  await new Promise((resolve, reject) => {
-    image.onload = resolve;
-    image.onerror = reject;
-    image.src = source;
-  });
+  const image = await loadImageFromFile(file);
 
   const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
   const canvas = document.createElement('canvas');
@@ -773,6 +812,10 @@ async function handleAddProduct(event) {
     form.reset();
     alert('Товар успішно додано до каталогу');
   } catch (error) {
+    if (error && error.message === 'heic-conversion-unavailable') {
+      alert('Для обробки HEIC/HEIF потрібне підключення до інтернету. Перевірте з’єднання та спробуйте ще раз.');
+      return;
+    }
     alert('Не вдалося завантажити фотографії. Спробуйте ще раз.');
   }
 }
