@@ -786,8 +786,15 @@ async function handleAddProduct(event) {
     return;
   }
 
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+
   try {
-    const gallery = await Promise.all(uploadedFiles.map(readProductImageAsDataUrl));
+    const gallery = [];
+    for (const file of uploadedFiles) {
+      gallery.push(await readProductImageAsDataUrl(file));
+    }
+
     const newProduct = {
       id: Date.now(),
       category: formData.get('category') || 'Winter Sale',
@@ -816,7 +823,15 @@ async function handleAddProduct(event) {
       alert('Для обробки HEIC/HEIF потрібне підключення до інтернету. Перевірте з’єднання та спробуйте ще раз.');
       return;
     }
+
+    if (error && (error.name === 'QuotaExceededError' || error.code === 22 || error.code === 1014)) {
+      alert('У сховищі браузера недостатньо місця для цих фотографій. Спробуйте вибрати менше фото або видалити непотрібні товари.');
+      return;
+    }
+
     alert('Не вдалося завантажити фотографії. Спробуйте ще раз.');
+  } finally {
+    if (submitButton) submitButton.disabled = false;
   }
 }
 
